@@ -141,12 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btnEvaluate.disabled = true;
 
         try {
-            const response = await fetch('/api/evaluate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({n, start: startCell, end: endCell, obstacles})
-            });
-            const data = await response.json();
+            // 在前端進行 Policy Evaluation 而不依賴 Python 後端 (為了支援 GitHub Pages)
+            const data = evaluatePolicyLocal(n, startCell, endCell, obstacles);
             
             if (data.error) {
                 alert("Error: " + data.error);
@@ -156,11 +152,80 @@ document.addEventListener('DOMContentLoaded', () => {
             renderResults(data.policy, data.values);
         } catch (e) {
             console.error(e);
-            alert('目前無法連線到後端評估伺服器，請確認 app.py 正在運行中。');
+            alert('評估時發生錯誤。');
         } finally {
             btnEvaluate.innerText = "Evaluate Policy";
             enableEvaluate();
         }
+    }
+
+    function evaluatePolicyLocal(n, start, end, obstacles) {
+        if (!start || !end) return {error: 'Missing start or end state'};
+        
+        const actions = ['up', 'down', 'left', 'right'];
+        let policy = [];
+        const isObstacle = (r, c) => obstacles.some(o => o.r === r && o.c === c);
+        const isEnd = (r, c) => end.r === r && end.c === c;
+
+        for (let r = 0; r < n; r++) {
+            let rowP = [];
+            for (let c = 0; c < n; c++) {
+                if (isEnd(r, c)) {
+                    rowP.push('end');
+                } else if (isObstacle(r, c)) {
+                    rowP.push('obstacle');
+                } else {
+                    rowP.push(actions[Math.floor(Math.random() * actions.length)]);
+                }
+            }
+            policy.push(rowP);
+        }
+
+        let V = Array.from({length: n}, () => Array(n).fill(0.0));
+        const gamma = 0.9;
+        const theta = 1e-4;
+
+        function getTransition(r, c, action) {
+            let nr = r, nc = c;
+            if (action === 'up') nr -= 1;
+            else if (action === 'down') nr += 1;
+            else if (action === 'left') nc -= 1;
+            else if (action === 'right') nc += 1;
+
+            if (nr < 0 || nr >= n || nc < 0 || nc >= n) return {nr: r, nc: c, reward: -1}; // bounce back
+            if (isObstacle(nr, nc)) return {nr: r, nc: c, reward: -1}; // bounce back
+            if (isEnd(nr, nc)) return {nr: nr, nc: nc, reward: 10};
+            return {nr: nr, nc: nc, reward: -1};
+        }
+
+        let iterations = 0;
+        const maxIterations = 5000;
+        while (iterations < maxIterations) {
+            let delta = 0;
+            for (let r = 0; r < n; r++) {
+                for (let c = 0; c < n; c++) {
+                    if (isEnd(r, c) || isObstacle(r, c)) continue;
+                    
+                    let v = V[r][c];
+                    let action = policy[r][c];
+                    let trans = getTransition(r, c, action);
+                    
+                    let new_v = trans.reward + gamma * V[trans.nr][trans.nc];
+                    V[r][c] = new_v;
+                    delta = Math.max(delta, Math.abs(v - new_v));
+                }
+            }
+            if (delta < theta) break;
+            iterations++;
+        }
+
+        for (let r = 0; r < n; r++) {
+            for (let c = 0; c < n; c++) {
+                V[r][c] = parseFloat(V[r][c].toFixed(2));
+            }
+        }
+
+        return {policy, values: V, iterations};
     }
 
     function renderResults(policy, values) {

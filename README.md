@@ -8,23 +8,19 @@
 ## 環境要求
 請在 Anaconda 中您指定的 `DRL` 環境執行。
 
-## 安裝套件
-如果您尚未安裝 `Flask`，請在 Anaconda Prompt 內啟動環境並執行：
+## 專案架構
+這是一個完全不需後端伺服器的靜態網頁（Static Single-Page Application）。所有的 Policy Evaluation 與運算皆使用 JavaScript 在使用者瀏覽器內即時完成。因此，**完美支援 GitHub Pages** 或任何靜態資源託管服務。
 
-```bash
-conda activate DRL
-pip install flask
-```
+## 啟動系統 (使用方式)
 
-## 啟動系統
-在命令提示字元 (Anaconda Prompt) 中，切換到此專案資料夾 (`d:\Desktop\深度強化學習\HW1`)，然後執行 `app.py`：
+### 方法一：GitHub Pages (推薦)
+1. 前往本專案的 GitHub Pages 網址（如果已經在 GitHub 上開啟 Pages 功能）。
+2. 例如預設網址：`https://e1458822-coder.github.io/0325HW1/`
+3. 打開後即可直接使用。
 
-```bash
-cd /d d:\Desktop\深度強化學習\HW1
-python app.py
-```
-
-接著，在您的瀏覽器中開啟 `http://127.0.0.1:5000` 即可檢視並操作網格地圖！
+### 方法二：本機端執行
+1. 將此專案 Clone/下載 到本機端。
+2. 直接雙擊打開專案根目錄中的 `index.html`，即可在網頁瀏覽器 (Chrome / Edge 等) 中進行操作。
 
 ## 系統重點流程說明
 1. **設定 N 值**：輸入您要的維度大小 5 到 9，點擊 Generate Square。
