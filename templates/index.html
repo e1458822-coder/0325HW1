@@ -5,15 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RL Gridworld - HW1</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- 改用相對路徑，讓 GitHub Pages 可以讀取 -->
-    <link rel="stylesheet" href="static/css/style.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <div class="app-container">
         <!-- Header Section -->
         <header>
             <h1><span class="highlight">RL</span> Gridworld</h1>
-            <p>HW1-1 網格地圖開發 & HW1-2 策略顯示與價值評估</p>
+            <p>HW1-1 網格地圖, HW1-2 策略評估, HW1-3 價值迭代算法</p>
         </header>
 
         <!-- Main Application Area -->
@@ -30,7 +29,10 @@
                     <p id="status-text">Step 1: 請先產生 (Generate) 網格開始設定。</p>
                 </div>
                 
-                <button id="btn-evaluate" class="btn success disabled" disabled>Evaluate Policy</button>
+                <div class="action-buttons">
+                    <button id="btn-eval-random" class="btn secondary disabled" disabled>HW1-2 生成隨機策略</button>
+                    <button id="btn-val-iter" class="btn success disabled" disabled>HW1-3 最佳價值迭代</button>
+                </div>
             </section>
 
             <!-- Grid Setup Section -->
@@ -43,19 +45,19 @@
             
             <!-- Analysis Results Section -->
             <section class="results-section" id="results-section" style="display: none;">
-                <div class="result-card glass-panel">
-                    <h3>Value Matrix <span class="subtitle">V(s)</span></h3>
+                <div class="result-card glass-panel" id="result-wrapper">
+                    <h3 id="result-val-title">Value Matrix <span class="subtitle">V(s)</span></h3>
                     <div class="grid-container" id="value-grid"></div>
                 </div>
                 <div class="result-card glass-panel">
-                    <h3>Policy Matrix <span class="subtitle">Random</span></h3>
+                    <h3 id="result-pol-title">Policy Matrix <span class="subtitle">Policy</span></h3>
                     <div class="grid-container" id="policy-grid"></div>
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- 改用相對路徑，讓 GitHub Pages 可以讀取 -->
-    <script src="static/js/main.js"></script>
+    <!-- 載入腳本 -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

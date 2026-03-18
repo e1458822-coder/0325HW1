@@ -13,14 +13,21 @@
 
 ## 啟動系統 (使用方式)
 
-### 方法一：GitHub Pages (推薦)
-1. 前往本專案的 GitHub Pages 網址（如果已經在 GitHub 上開啟 Pages 功能）。
-2. 例如預設網址：`https://e1458822-coder.github.io/0325HW1/`
-3. 打開後即可直接使用。
+因為包含了後端「價值迭代運算」，請在本地 Anaconda 環境中執行：
 
-### 方法二：本機端執行
-1. 將此專案 Clone/下載 到本機端。
-2. 直接雙擊打開專案根目錄中的 `index.html`，即可在網頁瀏覽器 (Chrome / Edge 等) 中進行操作。
+1. 開啟 **Anaconda Prompt**，並啟動 `DRL` 環境：
+   ```bash
+   conda activate DRL
+   ```
+2. 切換到此專案資料夾：
+   ```bash
+   cd /d D:\Desktop\深度強化學習\HW1
+   ```
+3. 執行 Flask 後端程式：
+   ```bash
+   python app.py
+   ```
+4. 開啟瀏覽器，前往：[http://127.0.0.1:5000](http://127.0.0.1:5000)
 
 ## 系統重點流程說明
 1. **設定 N 值**：輸入您要的維度大小 5 到 9，點擊 Generate Square。

@@ -2,7 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Elements ---
     const sizeInput = document.getElementById('grid-size');
     const btnGenerate = document.getElementById('btn-generate');
-    const btnEvaluate = document.getElementById('btn-evaluate');
+    const btnEvalRandom = document.getElementById('btn-eval-random');
+    const btnValIter = document.getElementById('btn-val-iter');
     const statusText = document.getElementById('status-text');
     
     const setupSection = document.getElementById('setup-section');
@@ -33,9 +34,14 @@ document.addEventListener('DOMContentLoaded', () => {
         initGrid();
     });
 
-    btnEvaluate.addEventListener('click', () => {
+    btnEvalRandom.addEventListener('click', () => {
         if (state !== 'READY') return;
-        evaluatePolicy();
+        runAlgorithm('/api/evaluate', "Evaluating...", btnEvalRandom);
+    });
+
+    btnValIter.addEventListener('click', () => {
+        if (state !== 'READY') return;
+        runAlgorithm('/api/value_iteration', "Optimizing...", btnValIter);
     });
 
     // --- Logic ---
@@ -68,8 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gridTitle.innerText = `設定 ${n} x ${n} 的環境:`;
         setupSection.style.display = 'flex';
         
-        btnEvaluate.classList.add('disabled');
-        btnEvaluate.disabled = true;
+        disableAlgorithmButtons();
         
         state = 'SELECT_START';
         updateStatus();
@@ -96,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state = 'SELECT_OBS';
             } else {
                 state = 'READY';
-                enableEvaluate();
+                enableAlgorithmButtons();
             }
             updateStatus();
         } 
@@ -107,15 +112,24 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (obstacles.length >= maxObstacles) {
                 state = 'READY';
-                enableEvaluate();
+                enableAlgorithmButtons();
             }
             updateStatus();
         }
     }
 
-    function enableEvaluate() {
-        btnEvaluate.classList.remove('disabled');
-        btnEvaluate.disabled = false;
+    function enableAlgorithmButtons() {
+        btnEvalRandom.classList.remove('disabled');
+        btnEvalRandom.disabled = false;
+        btnValIter.classList.remove('disabled');
+        btnValIter.disabled = false;
+    }
+
+    function disableAlgorithmButtons() {
+        btnEvalRandom.classList.add('disabled');
+        btnEvalRandom.disabled = true;
+        btnValIter.classList.add('disabled');
+        btnValIter.disabled = true;
     }
 
     function updateStatus() {
@@ -130,116 +144,78 @@ document.addEventListener('DOMContentLoaded', () => {
             statusText.innerHTML = `Step 4: 點擊設定剩餘 <strong>${left}</strong> 個 <strong style='color:var(--text-secondary)'>障礙物</strong>(灰色)。`;
             statusText.style.color = "var(--text-primary)";
         } else if (state === 'READY') {
-            statusText.innerText = "設定完成！請點選右側的「Evaluate Policy」進行策略與價值推導。";
+            statusText.innerHTML = "設定完成！請點擊上方按鈕執行 <strong>隨機策略評估(HW1-2)</strong> 或 <strong>價值迭代算法(HW1-3)</strong>。";
             statusText.style.color = "var(--success)";
         }
     }
 
-    async function evaluatePolicy() {
-        btnEvaluate.innerText = "Evaluating...";
-        btnEvaluate.classList.add('disabled');
-        btnEvaluate.disabled = true;
+    async function runAlgorithm(url, loadingText, buttonEl) {
+        let originalText = buttonEl.innerText;
+        buttonEl.innerText = loadingText;
+        disableAlgorithmButtons();
 
         try {
-            // 在前端進行 Policy Evaluation 而不依賴 Python 後端 (為了支援 GitHub Pages)
-            const data = evaluatePolicyLocal(n, startCell, endCell, obstacles);
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({n, start: startCell, end: endCell, obstacles})
+            });
+            const data = await response.json();
             
             if (data.error) {
                 alert("Error: " + data.error);
                 return;
             }
             
-            renderResults(data.policy, data.values);
+            renderResults(data);
         } catch (e) {
             console.error(e);
-            alert('評估時發生錯誤。');
+            alert('後端連線失敗，請確定 Flask (app.py) 正在執行中。');
         } finally {
-            btnEvaluate.innerText = "Evaluate Policy";
-            enableEvaluate();
+            buttonEl.innerText = originalText;
+            enableAlgorithmButtons();
         }
     }
 
-    function evaluatePolicyLocal(n, start, end, obstacles) {
-        if (!start || !end) return {error: 'Missing start or end state'};
+    function traceOptimalPath(policy) {
+        let path = [];
+        let curr = {r: startCell.r, c: startCell.c};
+        let visited = new Set();
         
-        const actions = ['up', 'down', 'left', 'right'];
-        let policy = [];
-        const isObstacle = (r, c) => obstacles.some(o => o.r === r && o.c === c);
-        const isEnd = (r, c) => end.r === r && end.c === c;
-
-        for (let r = 0; r < n; r++) {
-            let rowP = [];
-            for (let c = 0; c < n; c++) {
-                if (isEnd(r, c)) {
-                    rowP.push('end');
-                } else if (isObstacle(r, c)) {
-                    rowP.push('obstacle');
-                } else {
-                    // 加入終點引力：確保終點周圍的格子必定指向終點，以避免全部陷入無限迴圈 (-10)
-                    if (r > 0 && isEnd(r-1, c)) {
-                        rowP.push('up');
-                    } else if (r < n-1 && isEnd(r+1, c)) {
-                        rowP.push('down');
-                    } else if (c > 0 && isEnd(r, c-1)) {
-                        rowP.push('left');
-                    } else if (c < n-1 && isEnd(r, c+1)) {
-                        rowP.push('right');
-                    } else {
-                        rowP.push(actions[Math.floor(Math.random() * actions.length)]);
-                    }
-                }
+        while (true) {
+            let key = `${curr.r},${curr.c}`;
+            if (visited.has(key)) break; // prevent infinite loops in evaluation
+            visited.add(key);
+            
+            path.push(curr);
+            
+            if (curr.r === endCell.r && curr.c === endCell.c) {
+                break;
             }
-            policy.push(rowP);
-        }
-
-        let V = Array.from({length: n}, () => Array(n).fill(0.0));
-        const gamma = 0.9;
-        const theta = 1e-4;
-
-        function getTransition(r, c, action) {
-            let nr = r, nc = c;
+            
+            let action = policy[curr.r][curr.c];
+            if (action === 'obstacle' || action === 'end') break;
+            
+            let nr = curr.r, nc = curr.c;
             if (action === 'up') nr -= 1;
             else if (action === 'down') nr += 1;
             else if (action === 'left') nc -= 1;
             else if (action === 'right') nc += 1;
-
-            if (nr < 0 || nr >= n || nc < 0 || nc >= n) return {nr: r, nc: c, reward: -1}; // bounce back
-            if (isObstacle(nr, nc)) return {nr: r, nc: c, reward: -1}; // bounce back
-            if (isEnd(nr, nc)) return {nr: nr, nc: nc, reward: 10};
-            return {nr: nr, nc: nc, reward: -1};
+            
+            // bounds/obstacle check
+            if (nr < 0 || nr >= n || nc < 0 || nc >= n) break;
+            if (obstacles.some(o => o.r === nr && o.c === nc)) break;
+            
+            curr = {r: nr, c: nc};
         }
-
-        let iterations = 0;
-        const maxIterations = 5000;
-        while (iterations < maxIterations) {
-            let delta = 0;
-            for (let r = 0; r < n; r++) {
-                for (let c = 0; c < n; c++) {
-                    if (isEnd(r, c) || isObstacle(r, c)) continue;
-                    
-                    let v = V[r][c];
-                    let action = policy[r][c];
-                    let trans = getTransition(r, c, action);
-                    
-                    let new_v = trans.reward + gamma * V[trans.nr][trans.nc];
-                    V[r][c] = new_v;
-                    delta = Math.max(delta, Math.abs(v - new_v));
-                }
-            }
-            if (delta < theta) break;
-            iterations++;
-        }
-
-        for (let r = 0; r < n; r++) {
-            for (let c = 0; c < n; c++) {
-                V[r][c] = parseFloat(V[r][c].toFixed(2));
-            }
-        }
-
-        return {policy, values: V, iterations};
+        return path;
     }
 
-    function renderResults(policy, values) {
+    function renderResults(data) {
+        const policy = data.policy;
+        const values = data.values;
+        const isOptimal = data.type === 'optimal';
+        
         valueGrid.innerHTML = '';
         policyGrid.innerHTML = '';
         
@@ -247,6 +223,17 @@ document.addEventListener('DOMContentLoaded', () => {
         policyGrid.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
         valueGrid.setAttribute('data-size', n);
         policyGrid.setAttribute('data-size', n);
+
+        // Update Title dynamically
+        document.getElementById('result-val-title').innerHTML = 
+            `Value Matrix <span class="subtitle ${isOptimal? 'highlight-text':''}">${isOptimal ? 'Optimal V*(s)' : 'Random V(s)'}</span>`;
+        document.getElementById('result-pol-title').innerHTML = 
+            `Policy Matrix <span class="subtitle ${isOptimal? 'highlight-text':''}">${isOptimal ? 'Optimal Policy π*' : 'Random Policy'}</span>`;
+
+        let optimalPath = [];
+        if (isOptimal) {
+            optimalPath = traceOptimalPath(policy);
+        }
 
         const arrowMap = {
             'up': '↑',
@@ -260,6 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isStart = startCell && startCell.r === r && startCell.c === c;
                 const isEnd = endCell && endCell.r === r && endCell.c === c;
                 const isObs = obstacles.some(o => o.r === r && o.c === c);
+                const inPath = optimalPath.some(p => p.r === r && p.c === c);
 
                 // --- Value Cell Setup ---
                 const vCell = document.createElement('div');
@@ -267,6 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isStart) vCell.classList.add('start');
                 if (isEnd) vCell.classList.add('end');
                 if (isObs) vCell.classList.add('obstacle');
+                if (inPath && !isStart && !isEnd) vCell.classList.add('path-highlight');
                 if (!isObs) {
                     vCell.innerText = values[r][c];
                 }
@@ -278,6 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isStart) pCell.classList.add('start');
                 if (isEnd) pCell.classList.add('end');
                 if (isObs) pCell.classList.add('obstacle');
+                if (inPath && !isStart && !isEnd) pCell.classList.add('path-highlight');
                 
                 let p = policy[r][c];
                 if (p === 'end') {
@@ -286,6 +276,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (p === 'obstacle') {
                     pCell.innerText = '';
                 } else {
+                    if (isOptimal && inPath && !isStart && !isEnd) {
+                        pCell.style.color = '#fbbf24'; // pop yellow arrow for path
+                    }
                     pCell.innerText = arrowMap[p] || '';
                 }
                 policyGrid.appendChild(pCell);
