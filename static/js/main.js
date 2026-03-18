@@ -175,7 +175,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (isObstacle(r, c)) {
                     rowP.push('obstacle');
                 } else {
-                    rowP.push(actions[Math.floor(Math.random() * actions.length)]);
+                    // 加入終點引力：確保終點周圍的格子必定指向終點，以避免全部陷入無限迴圈 (-10)
+                    if (r > 0 && isEnd(r-1, c)) {
+                        rowP.push('up');
+                    } else if (r < n-1 && isEnd(r+1, c)) {
+                        rowP.push('down');
+                    } else if (c > 0 && isEnd(r, c-1)) {
+                        rowP.push('left');
+                    } else if (c < n-1 && isEnd(r, c+1)) {
+                        rowP.push('right');
+                    } else {
+                        rowP.push(actions[Math.floor(Math.random() * actions.length)]);
+                    }
                 }
             }
             policy.push(rowP);
