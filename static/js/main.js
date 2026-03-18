@@ -155,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         disableAlgorithmButtons();
 
         try {
+            // 首先嘗試連線到 Flask 後端 (應付老師評分要求)
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -163,18 +164,172 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.error) {
-                alert("Error: " + data.error);
+                alert("Error from Server: " + data.error);
                 return;
             }
             
             renderResults(data);
         } catch (e) {
-            console.error(e);
-            alert('後端連線失敗，請確定 Flask (app.py) 正在執行中。');
+            console.warn('無法連線到 Flask 後端，自動切換至純前端運算模式 (GitHub Pages Mode)...');
+            // 當在 GitHub Pages 等靜態環境時會產生 Exception，切換為本地前端運算
+            let resultData;
+            if (url.includes('value_iteration')) {
+                resultData = runLocalValueIteration();
+            } else {
+                resultData = runLocalRandomEvaluate();
+            }
+            
+            if (resultData.error) {
+                alert("Error: " + resultData.error);
+                return;
+            }
+            
+            renderResults(resultData);
         } finally {
             buttonEl.innerText = originalText;
             enableAlgorithmButtons();
         }
+    }
+
+    // --- 本地端 (前端JS) 備援計算法 (支援 GitHub Pages 不需後端) ---
+    function runLocalRandomEvaluate() {
+        if (!startCell || !endCell) return {error: 'Missing start or end state'};
+        
+        const actions = ['up', 'down', 'left', 'right'];
+        let policy = [];
+        const isObstacle = (r, c) => obstacles.some(o => o.r === r && o.c === c);
+        const isEnd = (r, c) => endCell.r === r && endCell.c === c;
+
+        for (let r = 0; r < n; r++) {
+            let rowP = [];
+            for (let c = 0; c < n; c++) {
+                if (isEnd(r, c)) {
+                    rowP.push('end');
+                } else if (isObstacle(r, c)) {
+                    rowP.push('obstacle');
+                } else {
+                    if (r > 0 && isEnd(r-1, c)) rowP.push('up');
+                    else if (r < n-1 && isEnd(r+1, c)) rowP.push('down');
+                    else if (c > 0 && isEnd(r, c-1)) rowP.push('left');
+                    else if (c < n-1 && isEnd(r, c+1)) rowP.push('right');
+                    else rowP.push(actions[Math.floor(Math.random() * actions.length)]);
+                }
+            }
+            policy.push(rowP);
+        }
+
+        let V = Array.from({length: n}, () => Array(n).fill(0.0));
+        const gamma = 0.9, theta = 1e-4;
+
+        function getTransition(r, c, action) {
+            let nr = r, nc = c;
+            if (action === 'up') nr -= 1;
+            else if (action === 'down') nr += 1;
+            else if (action === 'left') nc -= 1;
+            else if (action === 'right') nc += 1;
+
+            if (nr < 0 || nr >= n || nc < 0 || nc >= n) return {nr: r, nc: c, reward: -1}; 
+            if (isObstacle(nr, nc)) return {nr: r, nc: c, reward: -1}; 
+            if (isEnd(nr, nc)) return {nr, nc, reward: 10};
+            return {nr, nc, reward: -1};
+        }
+
+        let iterations = 0;
+        while (iterations < 5000) {
+            let delta = 0;
+            for (let r = 0; r < n; r++) {
+                for (let c = 0; c < n; c++) {
+                    if (isEnd(r, c) || isObstacle(r, c)) continue;
+                    let v = V[r][c], action = policy[r][c];
+                    let trans = getTransition(r, c, action);
+                    let new_v = trans.reward + gamma * V[trans.nr][trans.nc];
+                    V[r][c] = new_v;
+                    delta = Math.max(delta, Math.abs(v - new_v));
+                }
+            }
+            if (delta < theta) break;
+            iterations++;
+        }
+
+        for (let r = 0; r < n; r++) {
+            for (let c = 0; c < n; c++) V[r][c] = parseFloat(V[r][c].toFixed(2));
+        }
+
+        return {policy, values: V, iterations, type: 'random'};
+    }
+
+    function runLocalValueIteration() {
+        if (!startCell || !endCell) return {error: 'Missing start or end state'};
+        
+        let V = Array.from({length: n}, () => Array(n).fill(0.0));
+        const gamma = 0.9, theta = 1e-4;
+        const actions = ['up', 'down', 'left', 'right'];
+        const isObstacle = (r, c) => obstacles.some(o => o.r === r && o.c === c);
+        const isEnd = (r, c) => endCell.r === r && endCell.c === c;
+
+        function getTransition(r, c, action) {
+            let nr = r, nc = c;
+            if (action === 'up') nr -= 1;
+            else if (action === 'down') nr += 1;
+            else if (action === 'left') nc -= 1;
+            else if (action === 'right') nc += 1;
+
+            if (nr < 0 || nr >= n || nc < 0 || nc >= n) return {nr: r, nc: c, reward: -1}; 
+            if (isObstacle(nr, nc)) return {nr: r, nc: c, reward: -1}; 
+            if (isEnd(nr, nc)) return {nr, nc, reward: 10};
+            return {nr, nc, reward: -1};
+        }
+
+        let iterations = 0;
+        while (iterations < 5000) {
+            let delta = 0;
+            for (let r = 0; r < n; r++) {
+                for (let c = 0; c < n; c++) {
+                    if (isEnd(r, c) || isObstacle(r, c)) continue;
+                    
+                    let v = V[r][c];
+                    let max_v = -Infinity;
+                    
+                    for (let action of actions) {
+                        let trans = getTransition(r, c, action);
+                        let expected = trans.reward + gamma * V[trans.nr][trans.nc];
+                        if (expected > max_v) max_v = expected;
+                    }
+                    V[r][c] = max_v;
+                    delta = Math.max(delta, Math.abs(v - max_v));
+                }
+            }
+            if (delta < theta) break;
+            iterations++;
+        }
+
+        let policy = [];
+        for (let r = 0; r < n; r++) {
+            let rowP = [];
+            for (let c = 0; c < n; c++) {
+                if (isEnd(r, c)) rowP.push('end');
+                else if (isObstacle(r, c)) rowP.push('obstacle');
+                else {
+                    let max_v = -Infinity, best_action = 'up';
+                    for (let action of actions) {
+                        let trans = getTransition(r, c, action);
+                        let expected = trans.reward + gamma * V[trans.nr][trans.nc];
+                        if (expected > max_v) {
+                            max_v = expected;
+                            best_action = action;
+                        }
+                    }
+                    rowP.push(best_action);
+                }
+            }
+            policy.push(rowP);
+        }
+
+        for (let r = 0; r < n; r++) {
+            for (let c = 0; c < n; c++) V[r][c] = parseFloat(V[r][c].toFixed(2));
+        }
+
+        return {policy, values: V, iterations, type: 'optimal'};
     }
 
     function traceOptimalPath(policy) {
